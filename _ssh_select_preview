@@ -1,0 +1,23 @@
+#!/usr/bin/env zsh
+#
+# Preview helper for ssh-select (called by fzf --preview)
+
+local input="$1"
+local clean="${input//$'\033'\[*m/}"
+local host="${clean%% *}"
+
+local SSH_CONFIG="$HOME/.ssh/config"
+local in_block=0
+
+while IFS= read -r line; do
+  line="${line#"${line%%[![:space:]]*}"}"
+  [[ "$line" = "Host ${host}" ]] && { in_block=1; continue; }
+  if [[ $in_block -eq 1 && "$line" = "Host "* ]]; then
+    break
+  fi
+  if [[ $in_block -eq 1 && -n "$line" && "$line" != "#"* ]]; then
+    local key="${line%% *}"
+    local val="${line#* }"
+    printf "  \033[1;36m%-14s\033[0m %s\n" "$key" "$val"
+  fi
+done < "$SSH_CONFIG"

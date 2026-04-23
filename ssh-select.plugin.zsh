@@ -12,7 +12,7 @@ ssh-select() {
   fi
 
   # Parse ssh config
-  local -A host_info host_user
+  local -A host_info host_user host_port host_id
   local current_host=""
 
   while IFS= read -r line; do
@@ -25,8 +25,10 @@ ssh-select() {
       current_host="${line#Host }"
     elif [[ -n "$current_host" ]]; then
       case "$line" in
-        "HostName "*) host_info[$current_host]="${line#HostName }" ;;
-        "User "*)     host_user[$current_host]="${line#User }" ;;
+        "HostName "*)    host_info[$current_host]="${line#HostName }" ;;
+        "User "*)        host_user[$current_host]="${line#User }" ;;
+        "Port "*)        host_port[$current_host]="${line#Port }" ;;
+        "IdentityFile "*) host_id[$current_host]="${line#IdentityFile }" ;;
       esac
     fi
   done < "$SSH_CONFIG"
@@ -51,7 +53,11 @@ ssh-select() {
     return 1
   fi
 
-  # Build display with aligned columns
+  # Colors
+  local D=$'\033[2m' BD=$'\033[1m' RS=$'\033[0m'
+  local C=$'\033[36m' G=$'\033[32m' M=$'\033[35m'
+
+  # Build display with colored columns
   local -a display_list
   local h max_len=0
   for h in "${hosts[@]}"; do
@@ -62,34 +68,42 @@ ssh-select() {
     local ip="${host_info[$h]}"
     local user="${host_user[$h]:-}"
     local pad="${(l:$((max_len - ${#h} + 2)):: :)}"
-    if [[ -n "$user" ]]; then
-      display_list+=("$h${pad}${user}@${ip}")
-    else
-      display_list+=("$h${pad}${ip}")
-    fi
+    local addr="${user:+${C}${user}${RS}${D}@${RS}}${G}${ip}${RS}"
+    display_list+=("${BD}${h}${RS}${pad}${addr}")
   done
+
+  # Header
+  local header="${M} Host$(printf '%*s' $((max_len-1)))Address${RS}"
 
   local selected
   selected=$(printf '%s\n' "${display_list[@]}" \
     | fzf \
+      --ansi \
       --prompt="SSH > " \
-      --height=~50% \
+      --height=~60% \
       --border=rounded \
-      --margin=1 \
-      --padding=1 \
+      --margin=1,2 \
+      --padding=1,2 \
       --info=inline \
-      --header="$(tput bold)  Host$(printf '%*s' $((max_len-1)))  Address$(tput sgr0)" \
-      --color="fg:#c0c0c0,bg:#1a1a2e,hl:#ff6b6b:bold" \
-      --color="fg+:#ffffff,bg+:#16213e,hl+:#ff6b6b:bold" \
-      --color="prompt:#4ecdc4,header:#e2e2e2:bold,border:#4ecdc4" \
-      --color="pointer:#4ecdc4,marker:#ff6b6b,spinner:#4ecdc4" \
-      --pointer=">" \
-      --marker=">" \
+      --header="$header" \
+      --color="fg:#a6adc8,bg:#1e1e2e,hl:#f5c2e7" \
+      --color="fg+:#cdd6f4,bg+:#313244,hl+:#f5c2e7:bold" \
+      --color="prompt:#cba6f7,header:#cba6f7,border:#45475a" \
+      --color="pointer:#cba6f7:bold,marker:#f5c2e7,spinner:#cba6f7" \
+      --color="gutter:#1e1e2e" \
+      --pointer="❯" \
+      --marker="❯" \
+      --preview="${0:A:h}/_ssh_select_preview '{}'" \
+      --preview-window=right:50%:border-left \
       --bind 'shift-tab:up,tab:down' \
+      --bind 'esc:abort,q:abort' \
   )
 
   if [[ -n "$selected" ]]; then
-    local chosen_host="${selected%% *}"
+    local clean="${selected//$'\033'\[*m/}"
+    local chosen_host="${clean%% *}"
     ssh "$chosen_host"
+  else
+    echo "  Aborted ssh-select"
   fi
 }

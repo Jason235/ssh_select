@@ -10,8 +10,25 @@ if [[ ! -f "$SSH_CONFIG" ]]; then
   exit 1
 fi
 
+# 解析 ssh config 获取 Host 和 HostName
+declare -A host_info
+current_host=""
+
+while IFS= read -r line; do
+  line="${line%%#*}"  # 移除注释
+  line="${line#"${line%%[![:space:]]*}"}"  # trim leading whitespace
+  line="${line%"${line##*[![:space:]]}"}"  # trim trailing whitespace
+  [[ -z "$line" ]] && continue
+
+  if [[ "$line" = "Host "* ]]; then
+    current_host="${line#Host }"
+  elif [[ -n "$current_host" && "$line" = "HostName "* ]]; then
+    host_info[$current_host]="${line#HostName }"
+  fi
+done < "$SSH_CONFIG"
+
 # 提取所有 Host
-hosts=($(sed -n 's/^Host[[:space:]]*\([^\#*]*\)[[:space:]]*$/\1/p' "$SSH_CONFIG" | sort -u))
+hosts=("${(@k)host_info}")
 
 if [[ $# -eq 1 ]]; then
   # 直接连接指定主机
@@ -30,8 +47,16 @@ if [[ -z "$hosts" ]]; then
   exit 1
 fi
 
-selected=$(printf '%s\n' "${hosts[@]}" | fzf --prompt="🔐 SSH Select > " --height=~50% --border --inline-info)
+# 生成显示列表: "hostname -> user@ip"
+display_list=()
+for h in "${hosts[@]}"; do
+  display_list+=("$h -> ${host_info[$h]}")
+done
 
+selected=$(printf '%s\n' "${display_list[@]}" | fzf --prompt="🔐 SSH Select > " --height=~50% --border --inline-info)
+
+# 提取实际的 Host 名称
 if [[ -n "$selected" ]]; then
-  exec ssh "$selected"
+  chosen_host="${selected%% -> *}"
+  exec ssh "$chosen_host"
 fi

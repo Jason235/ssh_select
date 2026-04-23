@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 #
-# ssh-select - Simple SSH host picker
+# ssh-select - Simple SSH host picker (using fzf)
 # Usage: ssh-select [host]
 
 SSH_CONFIG="$HOME/.ssh/config"
@@ -24,11 +24,14 @@ if [[ $# -eq 1 ]]; then
   fi
 fi
 
-# 交互式选择
-echo "🔐 SSH Select (${#hosts} hosts found)"
-echo "----------------------------------------"
-select host in "${hosts[@]}"; do
-  if [[ -n "$host" ]]; then
-    exec ssh "$host"
-  fi
-done
+# 交互式选择（使用 fzf）
+if [[ -z "$hosts" ]]; then
+  echo "❌ No hosts found in ~/.ssh/config"
+  exit 1
+fi
+
+selected=$(printf '%s\n' "${hosts[@]}" | fzf --prompt="🔐 SSH Select > " --height=~50% --border --inline-info)
+
+if [[ -n "$selected" ]]; then
+  exec ssh "$selected"
+fi

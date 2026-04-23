@@ -108,6 +108,7 @@ alias ssweb='ssh-select web-server'
 ## 依赖
 
 - zsh 5.0+
+- [fzf](https://github.com/junegunn/fzf) 0.44+
 - ~/.ssh/config 文件存在且可读
 
 ## 工作原理
